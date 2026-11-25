@@ -5,7 +5,8 @@ One glyph that stands for the agent: a sharp-eyed hunter that watches,
 sweeps the whole field at a glance, and strikes precisely. Distinctive
 against the obvious robot or smiley, and it reads instantly at small size.
 
-Writes the single emoji to /output/entry.txt (plain open + chmod 644).
+Writes the single emoji to /output/entry.txt (plain open + chmod 644,
+then reads it back to verify it matches byte-for-byte).
 Python standard library only.
 """
 
@@ -31,19 +32,47 @@ def is_single_emoji(text):
 
 
 def validate(text):
-    """Assert the entry passes the competition gate."""
-    assert isinstance(text, str), "entry must be text"
-    assert 1 <= len(text) <= 16, "entry must be 1-16 characters"
-    assert text.strip(), "entry must not be only whitespace"
-    assert is_single_emoji(text), "entry must be exactly one emoji"
+    """Raise ValueError unless text is exactly the single expected emoji.
+
+    Raises (not asserts) so the gate still holds under ``python -O``,
+    where assert statements are stripped.
+    """
+    if not isinstance(text, str):
+        raise ValueError("entry must be text")
+    if len(text) != 1:
+        raise ValueError("entry must be exactly one character")
+    if text != ENTRY:
+        raise ValueError("entry must be the expected eagle emoji")
+    if text.isspace():
+        raise ValueError("entry must not be whitespace")
+    if not is_single_emoji(text):
+        raise ValueError("entry must be exactly one emoji")
+
+
+def write_entry(text, path=OUTPUT_PATH):
+    """Write the entry with plain open() and verify the result.
+
+    Never uses tempfile.mkstemp (it forces mode 0600, unreadable by the
+    grader). Writes, chmods 0644, then reads the file back and checks it
+    byte-for-byte matches the validated entry.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(path, 0o644)
+    if not os.access(path, os.R_OK):
+        raise OSError("written entry is not readable: %s" % path)
+    with open(path, "r", encoding="utf-8") as f:
+        written = f.read()
+    if written != text:
+        raise ValueError("written entry does not match validated entry")
+    validate(written)
+    return written
 
 
 def main():
     validate(ENTRY)
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        f.write(ENTRY)
-    os.chmod(OUTPUT_PATH, 0o644)
+    write_entry(ENTRY)
 
 
 if __name__ == "__main__":
